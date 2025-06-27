@@ -15,7 +15,7 @@
       "name": "Cafe Latte",
       "description": "Espresso dengan susu steamed yang creamy dan lembut",
       "image": "/images/koiu-latte.png",
-      "available": true,
+      "available": false,
       "category": "Coffee",
       "bestSeller": false,
       "variants": [
@@ -61,7 +61,7 @@
         "name": "Pandan",
         "description": "Kopi dengan aroma pandan yang harum dan rasa yang unik",
         "image": "/images/koiu-pandan.png",
-        "available": true,
+        "available": false,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
