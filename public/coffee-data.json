@@ -1,0 +1,147 @@
+{
+  "config": {
+    "adminWhatsApp": "6282217301554",
+    "storeName": "KOIU Coffee",
+    "currency": "Rp"
+  },
+  "coffees": [
+    {
+      "id": 1,
+      "name": "Cafe Latte",
+      "description": "Espresso dengan susu steamed yang creamy dan lembut",
+      "image": "/images/koiu-latte.png",
+      "available": true,
+      "category": "Coffee",
+      "bestSeller": false,
+      "variants": [
+        {
+          "id": "1-250ml",
+          "size": "250ml",
+          "price": 13000,
+          "originalPrice": 13000
+        },
+        {
+          "id": "1-1l",
+          "size": "1 Liter",
+          "price": 50000,
+          "originalPrice": 50000
+        }
+      ]
+    },
+    {
+        "id": 2,
+        "name": "Palm Sugar",
+        "description": "Kopi dengan gula aren asli yang memberikan rasa manis alami",
+        "image": "/images/koiu-palm-sugar.png",
+        "available": true,
+        "category": "Coffee",
+        "bestSeller": true,
+        "variants": [
+            {
+                "id": "2-250ml",
+                "size": "250ml",
+                "price": 13000,
+                "originalPrice": 13000
+            },
+            {
+                "id": "2-1l",
+                "size": "1 Liter",
+                "price": 50000,
+                "originalPrice": 50000
+            }
+        ]
+    },
+    {
+        "id": 3,
+        "name": "Pandan",
+        "description": "Kopi dengan aroma pandan yang harum dan rasa yang unik",
+        "image": "/images/koiu-pandan.png",
+        "available": true,
+        "category": "Coffee",
+        "bestSeller": false,
+        "variants": [
+            {
+                "id": "3-250ml",
+                "size": "250ml",
+                "price": 13000,
+                "originalPrice": 13000
+            },
+            {
+                "id": "3-1l",
+                "size": "1 Liter",
+                "price": 50000,
+                "originalPrice": 50000
+            }
+        ]
+    },
+    {
+        "id": 4,
+        "name": "Caramel",
+        "description": "Kopi dengan sirup caramel yang manis dan creamy",
+        "image": "/images/koiu-caramel.png",
+        "available": false,
+        "category": "Coffee",
+        "bestSeller": false,
+        "variants": [
+            {
+                "id": "4-250ml",
+                "size": "250ml",
+                "price": 13000,
+                "originalPrice": 13000
+            },
+            {
+                "id": "4-1l",
+                "size": "1 Liter",
+                "price": 50000,
+                "originalPrice": 50000
+            }
+        ]
+    },
+    {
+        "id": 5,
+        "name": "Hazelnut",
+        "description": "Kopi dengan rasa hazelnut yang kaya dan aromatic",
+        "image": "/images/koiu-hazelnut.png",
+        "available": false,
+        "category": "Coffee",
+        "bestSeller": false,
+        "variants": [
+            {
+                "id": "5-250ml",
+                "size": "250ml",
+                "price": 13000,
+                "originalPrice": 13000
+            },
+            {
+                "id": "5-1l",
+                "size": "1 Liter",
+                "price": 50000,
+                "originalPrice": 50000
+            }
+        ]
+    },
+    {
+        "id": 6,
+        "name": "Butterscotch",
+        "description": "Kopi dengan rasa butterscotch yang manis dan buttery",
+        "image": "/images/koiu-butterscotch.png",
+        "available": false,
+        "category": "Coffee",
+        "bestSeller": false,
+        "variants": [
+            {
+                "id": "6-250ml",
+                "size": "250ml",
+                "price": 13000,
+                "originalPrice": 13000
+            },
+            {
+                "id": "6-1l",
+                "size": "1 Liter",
+                "price": 50000,
+                "originalPrice": 50000
+            }
+        ]
+    }
+  ]
+} 
