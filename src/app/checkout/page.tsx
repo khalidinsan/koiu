@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, Suspense } from 'react';
-import { ArrowLeft, Plus, Minus, Trash2, MessageCircle, User, Phone } from 'lucide-react';
+import { ArrowLeft, Plus, Minus, Trash2, MessageCircle, User, Phone, MapPin, Navigation, Map } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
 
@@ -20,13 +20,18 @@ interface Config {
   adminWhatsApp: string;
   storeName: string;
   currency: string;
+  pickupLocation: {
+    address: string;
+    coordinates: string;
+    mapLink: string;
+  };
 }
 
 function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [config, setConfig] = useState<Config>({ adminWhatsApp: '', storeName: '', currency: '' });
+  const [config, setConfig] = useState<Config>({ adminWhatsApp: '', storeName: '', currency: '', pickupLocation: { address: '', coordinates: '', mapLink: '' } });
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -101,8 +106,12 @@ function CheckoutContent() {
       message += `• ${item.name} (${item.size}) x${item.quantity} - ${formatPrice(item.price * item.quantity)}\n`;
     });
     
-    message += `\n*Total: ${formatPrice(getTotalPrice())}*`;
-    message += `\n\nTerima kasih atas pesanannya! 🙏`;
+    message += `\n*Total: ${formatPrice(getTotalPrice())}*\n\n`;
+    message += `*Lokasi Pengambilan:*\n`;
+    message += `${config.pickupLocation.address}\n`;
+    message += `Koordinat: ${config.pickupLocation.coordinates}\n`;
+    message += `Maps: ${config.pickupLocation.mapLink}\n\n`;
+    message += `Terima kasih atas pesanannya! 🙏`;
 
     const whatsappUrl = `https://wa.me/${config.adminWhatsApp}?text=${encodeURIComponent(message)}`;
     
@@ -215,6 +224,46 @@ function CheckoutContent() {
                 <span className="text-2xl font-bold text-blue-600">
                   {formatPrice(getTotalPrice())}
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pickup Location */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 mb-6">
+          <div className="p-6">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">Lokasi Pengambilan</h2>
+            <div className="space-y-3">
+              <div className="flex items-start">
+                <div className="bg-blue-100 p-2 rounded-lg mr-3">
+                  <MapPin className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-800">Alamat</h3>
+                  <p className="text-gray-600">{config.pickupLocation.address}</p>
+                </div>
+              </div>
+{/*               
+              <div className="flex items-start">
+                <div className="bg-blue-100 p-2 rounded-lg mr-3">
+                  <Navigation className="h-5 w-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-800">Koordinat</h3>
+                  <p className="text-gray-600">{config.pickupLocation.coordinates}</p>
+                </div>
+              </div> */}
+              
+              <div className="mt-4">
+                <a 
+                  href={config.pickupLocation.mapLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center w-full bg-blue-100 text-blue-600 py-3 rounded-xl hover:bg-blue-200 transition-colors font-medium"
+                >
+                  <Map className="h-5 w-5 mr-2" />
+                  Buka di Google Maps
+                </a>
               </div>
             </div>
           </div>

@@ -2,7 +2,12 @@
   "config": {
     "adminWhatsApp": "6282217301554",
     "storeName": "KOIU Coffee",
-    "currency": "Rp"
+    "currency": "Rp",
+    "pickupLocation": {
+      "address": "LKP YANI 43 (Belakang Kantor Kecamatan Sumedang Utara), Jl. Pendopo No.17, RT.02/RW.07, Talun, Sumedang Utara",
+      "coordinates": "-6.849631952797085, 107.92745780720186",
+      "mapLink": "https://maps.app.goo.gl/gwGSq9k86R3sPJJH7"
+    }
   },
   "coffees": [
     {
