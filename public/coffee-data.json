@@ -15,7 +15,7 @@
       "name": "Cafe Latte",
       "description": "Espresso dengan susu steamed yang creamy dan lembut",
       "image": "/images/koiu-latte.png",
-      "available": false,
+      "available": true,
       "category": "Coffee",
       "bestSeller": false,
       "variants": [
@@ -61,7 +61,7 @@
         "name": "Pandan",
         "description": "Kopi dengan aroma pandan yang harum dan rasa yang unik",
         "image": "/images/koiu-pandan.png",
-        "available": false,
+        "available": true,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
@@ -84,7 +84,7 @@
         "name": "Caramel",
         "description": "Kopi dengan sirup caramel yang manis dan creamy",
         "image": "/images/koiu-caramel.png",
-        "available": false,
+        "available": true,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
@@ -107,7 +107,7 @@
         "name": "Hazelnut",
         "description": "Kopi dengan rasa hazelnut yang kaya dan aromatic",
         "image": "/images/koiu-hazelnut.png",
-        "available": false,
+        "available": true,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
@@ -130,7 +130,7 @@
         "name": "Butterscotch",
         "description": "Kopi dengan rasa butterscotch yang manis dan buttery",
         "image": "/images/koiu-butterscotch.png",
-        "available": false,
+        "available": true,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
