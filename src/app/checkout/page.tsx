@@ -107,10 +107,10 @@ function CheckoutContent() {
     });
     
     message += `\n*Total: ${formatPrice(getTotalPrice())}*\n\n`;
-    message += `*Lokasi Pengambilan:*\n`;
-    message += `${config.pickupLocation.address}\n`;
-    message += `Koordinat: ${config.pickupLocation.coordinates}\n`;
-    message += `Maps: ${config.pickupLocation.mapLink}\n\n`;
+    // message += `*Lokasi Pengambilan:*\n`;
+    // message += `${config.pickupLocation.address}\n`;
+    // message += `Koordinat: ${config.pickupLocation.coordinates}\n`;
+    // message += `Maps: ${config.pickupLocation.mapLink}\n\n`;
     message += `Terima kasih atas pesanannya! 🙏`;
 
     const whatsappUrl = `https://wa.me/${config.adminWhatsApp}?text=${encodeURIComponent(message)}`;
