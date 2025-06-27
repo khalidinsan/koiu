@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { ArrowLeft, Plus, Minus, Trash2, MessageCircle, User, Phone } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Image from 'next/image';
@@ -22,7 +22,7 @@ interface Config {
   currency: string;
 }
 
-export default function CheckoutPage() {
+function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -279,5 +279,24 @@ export default function CheckoutPage() {
         )}
       </div>
     </div>
+  );
+}
+
+function CheckoutLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Loading checkout...</p>
+      </div>
+    </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={<CheckoutLoadingFallback />}>
+      <CheckoutContent />
+    </Suspense>
   );
 } 
