@@ -107,7 +107,7 @@
         "name": "Hazelnut",
         "description": "Kopi dengan rasa hazelnut yang kaya dan aromatic",
         "image": "/images/koiu-hazelnut.png",
-        "available": true,
+        "available": false,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
