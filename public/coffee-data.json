@@ -84,7 +84,7 @@
         "name": "Caramel",
         "description": "Kopi dengan sirup caramel yang manis dan creamy",
         "image": "/images/koiu-caramel.png",
-        "available": true,
+        "available": false,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
@@ -130,7 +130,7 @@
         "name": "Butterscotch",
         "description": "Kopi dengan rasa butterscotch yang manis dan buttery",
         "image": "/images/koiu-butterscotch.png",
-        "available": true,
+        "available": false,
         "category": "Coffee",
         "bestSeller": false,
         "variants": [
