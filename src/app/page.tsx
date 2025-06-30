@@ -355,11 +355,11 @@ export default function CoffeeOrderPage() {
                   )}
 
                   {/* Stock Status */}
-                  <div className="mb-3">
+                  {/* <div className="mb-3">
                     <span className={`text-xs font-medium ${getStockColor(selectedVariant)}`}>
                       {getStockText(selectedVariant)}
                     </span>
-                  </div>
+                  </div> */}
 
                   {/* Price */}
                   <div className="flex items-center justify-between mb-3">
