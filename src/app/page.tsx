@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ShoppingCart, Plus, Minus, Coffee, CheckCircle, XCircle, Star, Search, Instagram, Facebook, Twitter, ChevronDown } from 'lucide-react';
+import { ShoppingCart, Plus, Minus, Coffee, CheckCircle, XCircle, Star, Search, Instagram, Facebook, Twitter } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 
@@ -10,6 +10,8 @@ interface Variant {
   size: string;
   price: number;
   originalPrice: number;
+  stock: number;
+  available: boolean;
 }
 
 interface Coffee {
@@ -38,35 +40,49 @@ interface Config {
   adminWhatsApp: string;
   storeName: string;
   currency: string;
+  pickupLocation: {
+    address: string;
+    coordinates: string;
+    mapLink: string;
+  };
 }
 
 export default function CoffeeOrderPage() {
   const router = useRouter();
   const [coffees, setCoffees] = useState<Coffee[]>([]);
-  const [config, setConfig] = useState<Config>({ adminWhatsApp: '', storeName: '', currency: '' });
+  const [config, setConfig] = useState<Config>({ 
+    adminWhatsApp: '', 
+    storeName: '', 
+    currency: '',
+    pickupLocation: { address: '', coordinates: '', mapLink: '' }
+  });
   const [cart, setCart] = useState<CartItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVariants, setSelectedVariants] = useState<{ [key: number]: string }>({});
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Load coffee data from JSON
-    fetch('/coffee-data.json')
+    // Load coffee data from API
+    fetch('/api/coffees')
       .then(response => response.json())
       .then(data => {
         setCoffees(data.coffees);
         setConfig(data.config);
         
-        // Set default selected variants (first variant for each coffee)
+        // Set default selected variants (first available variant for each coffee)
         const defaultVariants: { [key: number]: string } = {};
         data.coffees.forEach((coffee: Coffee) => {
           if (coffee.variants && coffee.variants.length > 0) {
-            defaultVariants[coffee.id] = coffee.variants[0].id;
+            // Find first available variant, or first variant if none available
+            const availableVariant = coffee.variants.find(v => v.available && v.stock > 0);
+            defaultVariants[coffee.id] = availableVariant ? availableVariant.id : coffee.variants[0].id;
           }
         });
         setSelectedVariants(defaultVariants);
       })
-      .catch(error => console.error('Error loading coffee data:', error));
+      .catch(error => console.error('Error loading coffee data:', error))
+      .finally(() => setIsLoading(false));
 
     // Load cart from localStorage
     const savedCart = localStorage.getItem('coffee-cart');
@@ -89,41 +105,45 @@ export default function CoffeeOrderPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const getSelectedVariant = (coffee: Coffee): Variant | null => {
+  const getSelectedVariant = (coffee: Coffee) => {
     const selectedVariantId = selectedVariants[coffee.id];
-    return coffee.variants.find(variant => variant.id === selectedVariantId) || coffee.variants[0] || null;
+    return coffee.variants.find(variant => variant.id === selectedVariantId) || coffee.variants[0];
   };
 
   const addToCart = (coffee: Coffee) => {
-    if (!coffee.available) return;
-    
     const selectedVariant = getSelectedVariant(coffee);
-    if (!selectedVariant) return;
+    if (!selectedVariant || !selectedVariant.available || selectedVariant.stock <= 0) return;
 
-    setCart(prevCart => {
-      const existingItem = prevCart.find(item => 
-        item.coffeeId === coffee.id && item.variantId === selectedVariant.id
-      );
+    const existingItem = cart.find(item => 
+      item.coffeeId === coffee.id && item.variantId === selectedVariant.id
+    );
+
+    if (existingItem) {
+      // Check if we can add more (don't exceed stock)
+      if (existingItem.quantity >= selectedVariant.stock) {
+        return; // Can't add more than available stock
+      }
       
-      if (existingItem) {
-        return prevCart.map(item =>
+      setCart(prevCart =>
+        prevCart.map(item =>
           item.coffeeId === coffee.id && item.variantId === selectedVariant.id
             ? { ...item, quantity: item.quantity + 1 }
             : item
-        );
-      } else {
-        return [...prevCart, {
-          coffeeId: coffee.id,
-          variantId: selectedVariant.id,
-          name: coffee.name,
-          size: selectedVariant.size,
-          price: selectedVariant.price,
-          originalPrice: selectedVariant.originalPrice,
-          image: coffee.image,
-          quantity: 1
-        }];
-      }
-    });
+        )
+      );
+    } else {
+      const newItem: CartItem = {
+        coffeeId: coffee.id,
+        variantId: selectedVariant.id,
+        name: coffee.name,
+        size: selectedVariant.size,
+        price: selectedVariant.price,
+        originalPrice: selectedVariant.originalPrice,
+        image: coffee.image,
+        quantity: 1
+      };
+      setCart(prevCart => [...prevCart, newItem]);
+    }
   };
 
   const removeFromCart = (coffeeId: number, variantId: string) => {
@@ -146,12 +166,12 @@ export default function CoffeeOrderPage() {
     });
   };
 
-  const getCartItemQuantity = (coffeeId: number, variantId: string): number => {
+  const getCartItemQuantity = (coffeeId: number, variantId: string) => {
     const item = cart.find(item => item.coffeeId === coffeeId && item.variantId === variantId);
     return item ? item.quantity : 0;
   };
 
-  const getCartItemCount = () => {
+  const getTotalItems = () => {
     return cart.reduce((total, item) => total + item.quantity, 0);
   };
 
@@ -172,11 +192,28 @@ export default function CoffeeOrderPage() {
     return Math.round(((variant.originalPrice - variant.price) / variant.originalPrice) * 100);
   };
 
-  const goToCheckout = () => {
-    if (cart.length > 0) {
-      router.push('/checkout');
-    }
+  const getStockText = (variant: Variant) => {
+    if (!variant.available || variant.stock <= 0) return 'Habis';
+    if (variant.stock < 10) return `Sisa ${variant.stock}`;
+    return 'Tersedia';
   };
+
+  const getStockColor = (variant: Variant) => {
+    if (!variant.available || variant.stock <= 0) return 'text-red-500';
+    if (variant.stock < 10) return 'text-yellow-500';
+    return 'text-green-500';
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading menu...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-white">
@@ -185,7 +222,7 @@ export default function CoffeeOrderPage() {
         <div className="px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-                <Image
+        <Image
                   src="/logo.svg"
                   alt={config.storeName}
                   width={80}
@@ -241,7 +278,7 @@ export default function CoffeeOrderPage() {
             <button
               key={category}
               onClick={() => setSelectedCategory(category)}
-              className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
+              className={`px-3 py-1.5 rounded-full whitespace-nowrap text-sm font-medium transition-all ${
                 selectedCategory === category
                   ? 'bg-blue-600 text-white shadow-lg'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -254,153 +291,143 @@ export default function CoffeeOrderPage() {
       </div>
 
       {/* Coffee Grid */}
-      <div className="px-4 pb-32 bg-gray-50">
+      <div className="px-4 pb-24">
         <div className="grid grid-cols-2 gap-4">
           {filteredCoffees.map(coffee => {
             const selectedVariant = getSelectedVariant(coffee);
-            if (!selectedVariant) return null;
-
+            const cartQuantity = getCartItemQuantity(coffee.id, selectedVariant.id);
+            const canAddToCart = selectedVariant.available && selectedVariant.stock > 0 && cartQuantity < selectedVariant.stock;
+            
             return (
-              <div key={coffee.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-lg transition-all duration-300">
-                <div className="relative">
-                  <div className="relative h-32 overflow-hidden">
-                    <Image
-                      src={coffee.image}
-                      alt={coffee.name}
-                      fill
-                      className="object-cover"
-                    />
-                    {hasDiscount(selectedVariant) && (
-                      <div className="absolute top-2 left-2">
-                        <div className="bg-red-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                          -{getDiscountPercentage(selectedVariant)}%
-                        </div>
-                      </div>
-                    )}
-                    {coffee.bestSeller && (
-                      <div className={`absolute top-2 ${hasDiscount(selectedVariant) ? 'left-2 mt-7' : 'left-2'}`}>
-                        <div className="bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-medium flex items-center">
-                          <Star className="h-3 w-3 mr-1" />
-                          Best Seller
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                
-                <div className="p-4">
-                  <h3 className="font-bold text-gray-800 text-base mb-1">{coffee.name}</h3>
-                  <p className="text-gray-600 text-xs mb-3 line-clamp-2">{coffee.description}</p>
-                  
-                  {/* Variant Selector */}
-                  <div className="mb-3">
-                    <div className="flex flex-wrap gap-1">
-                      {coffee.variants.map(variant => (
-                        <button
-                          key={variant.id}
-                          onClick={() => setSelectedVariants(prev => ({
-                            ...prev,
-                            [coffee.id]: variant.id
-                          }))}
-                          className={`px-2 py-1 text-xs rounded-full border transition-all ${
-                            selectedVariants[coffee.id] === variant.id
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-600 border-gray-300 hover:border-blue-600'
-                          }`}
-                        >
-                          {variant.size}
-                        </button>
-                      ))}
+              <div key={coffee.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                {/* Image */}
+                <div className="relative aspect-square">
+          <Image
+                    src={coffee.image}
+                    alt={coffee.name}
+                    fill
+                    className="object-cover"
+                  />
+                  {coffee.bestSeller && (
+                    <div className="absolute top-2 left-2 bg-yellow-400 text-gray-800 px-2 py-1 rounded-full text-xs font-bold">
+                      <Star className="inline h-3 w-3 mr-1" />
+                      Best Seller
                     </div>
+                  )}
+                  {hasDiscount(selectedVariant) && (
+                    <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold">
+                      -{getDiscountPercentage(selectedVariant)}%
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="p-4">
+                  <h3 className="font-bold text-gray-800 text-lg mb-1">{coffee.name}</h3>
+                  <p className="text-gray-600 text-sm mb-3 line-clamp-2">{coffee.description}</p>
+
+                  {/* Variant Selector - Pills */}
+                  {coffee.variants.length > 1 && (
+                    <div className="mb-3">
+                      <div className="flex flex-wrap gap-2">
+                        {coffee.variants.map(variant => (
+                          <button
+                            key={variant.id}
+                            onClick={() => setSelectedVariants(prev => ({
+                              ...prev,
+                              [coffee.id]: variant.id
+                            }))}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                              selectedVariants[coffee.id] === variant.id
+                                ? 'bg-blue-600 text-white shadow-md'
+                                : variant.available && variant.stock > 0
+                                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                : 'bg-gray-50 text-gray-400 cursor-not-allowed'
+                            }`}
+                            disabled={!variant.available || variant.stock <= 0}
+                          >
+                            {variant.size}
+                            {!variant.available || variant.stock <= 0 ? ' (Habis)' : ''}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stock Status */}
+                  <div className="mb-3">
+                    <span className={`text-xs font-medium ${getStockColor(selectedVariant)}`}>
+                      {getStockText(selectedVariant)}
+                    </span>
                   </div>
-                  
+
+                  {/* Price */}
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex flex-col">
+                    <div className="flex items-center space-x-2">
                       <span className="text-lg font-bold text-blue-600">
                         {formatPrice(selectedVariant.price)}
                       </span>
                       {hasDiscount(selectedVariant) && (
-                        <span className="text-xs text-gray-400 line-through">
+                        <span className="text-sm text-gray-400 line-through">
                           {formatPrice(selectedVariant.originalPrice)}
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    {getCartItemQuantity(coffee.id, selectedVariant.id) > 0 ? (
-                      <div className="flex items-center space-x-2 bg-gray-50 rounded-lg p-1 flex-1">
-                        <button
-                          onClick={() => removeFromCart(coffee.id, selectedVariant.id)}
-                          className="p-1 bg-white rounded-md shadow-sm hover:shadow-md transition-shadow"
-                        >
-                          <Minus className="h-3 w-3 text-gray-600" />
-                        </button>
-                        <span className="font-bold text-sm min-w-[24px] text-center text-blue-600 flex-1">
-                          {getCartItemQuantity(coffee.id, selectedVariant.id)}
-                        </span>
-                        <button
-                          onClick={() => addToCart(coffee)}
-                          disabled={!coffee.available}
-                          className="p-1 bg-blue-600 text-white rounded-md shadow-sm hover:shadow-md transition-shadow disabled:bg-gray-300"
-                        >
-                          <Plus className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ) : (
+                  {/* Add to Cart */}
+                  {cartQuantity > 0 ? (
+                    <div className="flex items-center justify-between bg-blue-50 rounded-xl p-2">
+                      <button
+                        onClick={() => removeFromCart(coffee.id, selectedVariant.id)}
+                        className="p-2 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                      >
+                        <Minus className="h-4 w-4 text-blue-600" />
+                      </button>
+                      <span className="font-semibold text-blue-600 text-lg">{cartQuantity}</span>
                       <button
                         onClick={() => addToCart(coffee)}
-                        disabled={!coffee.available}
-                        className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        disabled={!canAddToCart}
+                        className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                       >
-                        {coffee.available ? 'Add to Cart' : 'Sold Out'}
+                        <Plus className="h-4 w-4" />
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => addToCart(coffee)}
+                      disabled={!canAddToCart}
+                      className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
+        >
+                      <Plus className="h-4 w-4" />
+                      <span>Tambah</span>
+                    </button>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
-        
-        {filteredCoffees.length === 0 && (
-          <div className="text-center py-12">
-            <div className="text-6xl mb-4">🔍</div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">Tidak ada hasil</h3>
-            <p className="text-gray-600">Coba ubah kata kunci pencarian atau kategori</p>
-          </div>
-        )}
       </div>
 
       {/* Sticky Bottom Cart */}
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-2xl z-50">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-blue-600 rounded-xl">
-                  <ShoppingCart className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <p className="font-semibold text-gray-800">
-                    {getCartItemCount()} item{getCartItemCount() > 1 ? 's' : ''}
-                  </p>
-                  <p className="text-sm text-gray-500">Siap untuk checkout</p>
-                </div>
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="bg-blue-600 text-white p-2 rounded-lg">
+                <ShoppingCart className="h-5 w-5" />
               </div>
-              <div className="text-right">
-                <p className="text-lg font-bold text-blue-600">
-                  {formatPrice(getTotalPrice())}
-                </p>
-                <p className="text-xs text-gray-500">Total pembayaran</p>
+              <div>
+                <p className="font-semibold text-gray-800">{getTotalItems()} item</p>
+                <p className="text-sm text-gray-600">{formatPrice(getTotalPrice())}</p>
               </div>
             </div>
             <button
-              onClick={goToCheckout}
-              className="w-full bg-blue-600 text-white py-4 rounded-xl hover:bg-blue-700 transition-all font-semibold text-lg flex items-center justify-center space-x-2"
+              onClick={() => router.push('/checkout')}
+              className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 transition-colors font-semibold"
             >
-              <span>Lanjut ke Checkout</span>
-              <ShoppingCart className="h-5 w-5" />
+              Checkout
             </button>
           </div>
         </div>

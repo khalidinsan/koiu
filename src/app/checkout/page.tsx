@@ -31,21 +31,27 @@ function CheckoutContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [config, setConfig] = useState<Config>({ adminWhatsApp: '', storeName: '', currency: '', pickupLocation: { address: '', coordinates: '', mapLink: '' } });
+  const [config, setConfig] = useState<Config>({ 
+    adminWhatsApp: '', 
+    storeName: '', 
+    currency: '', 
+    pickupLocation: { address: '', coordinates: '', mapLink: '' } 
+  });
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customerNotes, setCustomerNotes] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    // Load config
-    fetch('/coffee-data.json')
+    // Load config from API
+    fetch('/api/coffees')
       .then(response => response.json())
       .then(data => {
         setConfig(data.config);
       })
       .catch(error => console.error('Error loading config:', error));
 
-    // Load cart from localStorage or URL params
+    // Load cart from localStorage
     const savedCart = localStorage.getItem('coffee-cart');
     if (savedCart) {
       setCart(JSON.parse(savedCart));
@@ -96,34 +102,81 @@ function CheckoutContent() {
 
     setIsLoading(true);
 
-    let message = `*Pesanan Baru dari ${config.storeName}*\n\n`;
-    message += `*Data Pemesan:*\n`;
-    message += `Nama: ${customerName}\n`;
-    message += `No. HP: ${customerPhone}\n\n`;
-    message += `*Detail Pesanan:*\n`;
-    
-    cart.forEach(item => {
-      message += `• ${item.name} (${item.size}) x${item.quantity} - ${formatPrice(item.price * item.quantity)}\n`;
-    });
-    
-    message += `\n*Total: ${formatPrice(getTotalPrice())}*\n\n`;
-    // message += `*Lokasi Pengambilan:*\n`;
-    // message += `${config.pickupLocation.address}\n`;
-    // message += `Koordinat: ${config.pickupLocation.coordinates}\n`;
-    // message += `Maps: ${config.pickupLocation.mapLink}\n\n`;
-    message += `Terima kasih atas pesanannya! 🙏`;
+    try {
+      // First, save order to backend
+      const orderData = {
+        customerName,
+        customerPhone,
+        customerNotes: customerNotes || null,
+        items: cart.map(item => ({
+          coffeeId: item.coffeeId,
+          variantId: item.variantId,
+          coffeeName: item.name,
+          variantSize: item.size,
+          price: item.price,
+          quantity: item.quantity
+        })),
+        totalAmount: getTotalPrice(),
+        paymentMethod: 'cash' as const, // Default payment method, admin can update later
+        pickupTime: null // Admin will set this later
+      };
 
-    const whatsappUrl = `https://wa.me/${config.adminWhatsApp}?text=${encodeURIComponent(message)}`;
-    
-    // Clear cart after successful order
-    localStorage.removeItem('coffee-cart');
-    
-    window.open(whatsappUrl, '_blank');
-    
-    setTimeout(() => {
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to create order');
+      }
+
+      // Order saved successfully, now send WhatsApp message
+      let message = `*Pesanan Baru dari ${config.storeName}*\n\n`;
+      message += `*Nomor Pesanan:* ${result.order.orderNumber}\n\n`;
+      message += `*Data Pemesan:*\n`;
+      message += `Nama: ${customerName}\n`;
+      message += `No. HP: ${customerPhone}\n`;
+      if (customerNotes) {
+        message += `Catatan: ${customerNotes}\n`;
+      }
+      message += `\n*Detail Pesanan:*\n`;
+      
+      cart.forEach(item => {
+        message += `• ${item.name} (${item.size}) x${item.quantity} - ${formatPrice(item.price * item.quantity)}\n`;
+      });
+      
+      message += `\n*Total: ${formatPrice(getTotalPrice())}*\n\n`;
+      message += `Status: Menunggu Konfirmasi\n`;
+      message += `Pembayaran: Akan dikonfirmasi admin\n\n`;
+      message += `Terima kasih atas pesanannya! 🙏\n`;
+      message += `Admin akan segera mengkonfirmasi pesanan Anda.`;
+
+      const whatsappUrl = `https://wa.me/${config.adminWhatsApp}?text=${encodeURIComponent(message)}`;
+      
+      // Clear cart after successful order
+      localStorage.removeItem('coffee-cart');
+      
+      // Open WhatsApp
+      window.open(whatsappUrl, '_blank');
+      
+      // Show success message and redirect
+      alert(`Pesanan berhasil dibuat!\nNomor Pesanan: ${result.order.orderNumber}\n\nAnda akan diarahkan ke WhatsApp untuk mengirim pesanan.`);
+      
+      setTimeout(() => {
+        router.push('/');
+      }, 2000);
+
+    } catch (error) {
+      console.error('Error creating order:', error);
+      alert('Gagal membuat pesanan. Silakan coba lagi.');
+    } finally {
       setIsLoading(false);
-      router.push('/');
-    }, 1000);
+    }
   };
 
   if (cart.length === 0) {
@@ -243,16 +296,6 @@ function CheckoutContent() {
                   <p className="text-gray-600">{config.pickupLocation.address}</p>
                 </div>
               </div>
-{/*               
-              <div className="flex items-start">
-                <div className="bg-blue-100 p-2 rounded-lg mr-3">
-                  <Navigation className="h-5 w-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-800">Koordinat</h3>
-                  <p className="text-gray-600">{config.pickupLocation.coordinates}</p>
-                </div>
-              </div> */}
               
               <div className="mt-4">
                 <a 
@@ -298,6 +341,18 @@ function CheckoutContent() {
                   onChange={(e) => setCustomerPhone(e.target.value)}
                   placeholder="Contoh: 08123456789"
                   className="w-full px-4 py-3 text-gray-800 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Catatan Pesanan (Opsional)
+                </label>
+                <textarea
+                  value={customerNotes}
+                  onChange={(e) => setCustomerNotes(e.target.value)}
+                  placeholder="Tambahkan catatan khusus untuk pesanan Anda..."
+                  className="w-full px-4 py-3 text-gray-800 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                  rows={3}
                 />
               </div>
             </div>
