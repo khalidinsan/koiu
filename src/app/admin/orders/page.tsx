@@ -1604,9 +1604,9 @@ export default function OrdersPage() {
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '16px' }}>
                   <h1 style={{ fontSize: '18px', fontWeight: 'bold', margin: '0 0 8px 0', fontFamily: 'monospace' }}>KOIU COFFEE</h1>
-                  <p style={{ fontSize: '12px', margin: '2px 0', fontFamily: 'monospace' }}>Jl. Coffee Street No. 123</p>
-                  <p style={{ fontSize: '12px', margin: '2px 0', fontFamily: 'monospace' }}>Bandung, Indonesia</p>
-                  <p style={{ fontSize: '12px', margin: '2px 0', fontFamily: 'monospace' }}>Tel: (022) 123-4567</p>
+                  <p style={{ fontSize: '12px', margin: '2px 0', fontFamily: 'monospace' }}>Jl. Pendopo No.17, Sumedang Utara</p>
+                  <p style={{ fontSize: '12px', margin: '2px 0', fontFamily: 'monospace' }}>Sumedang, Jawa Barat</p>
+                  <p style={{ fontSize: '12px', margin: '2px 0', fontFamily: 'monospace' }}>+62 822 1730 1554</p>
                   <div style={{ borderTop: '1px dashed #9ca3af', margin: '8px 0' }}></div>
                 </div>
 
