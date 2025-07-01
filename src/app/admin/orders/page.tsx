@@ -42,6 +42,12 @@ interface OrderItem {
   subtotal: number;
 }
 
+interface AdditionalFee {
+  id: string;
+  fee_name: string;
+  fee_amount: number;
+}
+
 interface Recipe {
   id: number;
   name: string;
@@ -72,6 +78,7 @@ interface Order {
   created_at: string;
   updated_at: string;
   order_items: OrderItem[];
+  order_additional_fees?: AdditionalFee[];
 }
 
 interface Pagination {
@@ -99,6 +106,11 @@ interface ManualOrderItem {
   variantSize: string;
   price: number;
   quantity: number;
+}
+
+interface ManualAdditionalFee {
+  feeName: string;
+  feeAmount: number;
 }
 
 export default function OrdersPage() {
@@ -144,7 +156,8 @@ export default function OrdersPage() {
     paymentMethod: 'cash' as 'cash' | 'transfer',
     pickupTime: '',
     status: 'pending' as 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled',
-    items: [] as ManualOrderItem[]
+    items: [] as ManualOrderItem[],
+    additionalFees: [] as ManualAdditionalFee[]
   });
 
   useEffect(() => {
@@ -336,7 +349,8 @@ export default function OrdersPage() {
       paymentMethod: 'cash',
       pickupTime: '',
       status: 'pending',
-      items: [{ coffeeId: 0, variantId: '', coffeeName: '', variantSize: '', price: 0, quantity: 1 }]
+      items: [{ coffeeId: 0, variantId: '', coffeeName: '', variantSize: '', price: 0, quantity: 1 }],
+      additionalFees: []
     });
     setShowManualOrderModal(true);
   };
@@ -348,7 +362,9 @@ export default function OrdersPage() {
     setSuccess('');
 
     try {
-      const totalAmount = manualOrderForm.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const itemsTotal = manualOrderForm.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+      const feesTotal = manualOrderForm.additionalFees.reduce((sum, fee) => sum + fee.feeAmount, 0);
+      const totalAmount = itemsTotal + feesTotal;
 
       const response = await fetch('/api/admin/orders', {
         method: 'POST',
@@ -370,7 +386,11 @@ export default function OrdersPage() {
           totalAmount,
           paymentMethod: manualOrderForm.paymentMethod,
           pickupTime: manualOrderForm.pickupTime || null,
-          status: manualOrderForm.status
+          status: manualOrderForm.status,
+          additionalFees: manualOrderForm.additionalFees.map(fee => ({
+            feeName: fee.feeName,
+            feeAmount: fee.feeAmount
+          }))
         }),
       });
 
@@ -460,6 +480,29 @@ export default function OrdersPage() {
         }));
       }
     }
+  };
+
+  const addAdditionalFee = () => {
+    setManualOrderForm(prev => ({
+      ...prev,
+      additionalFees: [...prev.additionalFees, { feeName: '', feeAmount: 0 }]
+    }));
+  };
+
+  const removeAdditionalFee = (index: number) => {
+    setManualOrderForm(prev => ({
+      ...prev,
+      additionalFees: prev.additionalFees.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateAdditionalFee = (index: number, field: keyof ManualAdditionalFee, value: any) => {
+    setManualOrderForm(prev => ({
+      ...prev,
+      additionalFees: prev.additionalFees.map((fee, i) => 
+        i === index ? { ...fee, [field]: value } : fee
+      )
+    }));
   };
 
   const handlePrint = useReactToPrint({
@@ -1011,6 +1054,54 @@ export default function OrdersPage() {
                 </div>
               </div>
 
+              {/* Additional Fees */}
+              {selectedOrder.order_additional_fees && selectedOrder.order_additional_fees.length > 0 && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">
+                    Additional Fees
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedOrder.order_additional_fees.map((fee) => (
+                      <div
+                        key={fee.id}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div className="font-medium text-gray-800">
+                          {fee.fee_name}
+                        </div>
+                        <div className="font-medium text-gray-800">
+                          {formatPrice(fee.fee_amount)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="text-gray-600">Items Subtotal:</span>
+                      <span className="font-medium text-gray-800">
+                        {formatPrice(
+                          selectedOrder.order_items.reduce((sum, item) => sum + item.subtotal, 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm mb-2">
+                      <span className="text-gray-600">Additional Fees:</span>
+                      <span className="font-medium text-gray-800">
+                        {formatPrice(
+                          selectedOrder.order_additional_fees.reduce((sum, fee) => sum + fee.fee_amount, 0)
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-lg font-semibold">
+                      <span>Total Amount:</span>
+                      <span className="text-primary-600">
+                        {formatPrice(selectedOrder.total_amount)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Current Status */}
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-3">
@@ -1432,11 +1523,133 @@ export default function OrdersPage() {
                         manualOrderForm.items.reduce(
                           (sum, item) => sum + item.price * item.quantity,
                           0
+                        ) + manualOrderForm.additionalFees.reduce(
+                          (sum, fee) => sum + fee.feeAmount,
+                          0
                         )
                       )}
                     </span>
                   </div>
                 </div>
+              </div>
+
+              {/* Additional Fees Section */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Additional Fees (Optional)
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addAdditionalFee}
+                    className="flex items-center space-x-1 px-3 py-1 bg-green-100 text-green-600 rounded-lg hover:bg-green-200 transition-colors text-sm"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Fee</span>
+                  </button>
+                </div>
+
+                {manualOrderForm.additionalFees.length > 0 && (
+                  <div className="space-y-3">
+                    {manualOrderForm.additionalFees.map((fee, index) => (
+                      <div
+                        key={index}
+                        className="p-3 border border-gray-200 rounded-lg"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="font-medium text-gray-800 text-sm">
+                            Fee {index + 1}
+                          </h4>
+                          <button
+                            type="button"
+                            onClick={() => removeAdditionalFee(index)}
+                            className="text-red-500 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Fee Name
+                            </label>
+                            <input
+                              type="text"
+                              value={fee.feeName}
+                              onChange={(e) =>
+                                updateAdditionalFee(index, 'feeName', e.target.value)
+                              }
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-900 bg-white"
+                              placeholder="e.g., Delivery Fee"
+                              required={manualOrderForm.additionalFees.length > 0}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              Amount
+                            </label>
+                            <input
+                              type="number"
+                              value={fee.feeAmount}
+                              onChange={(e) =>
+                                updateAdditionalFee(
+                                  index,
+                                  'feeAmount',
+                                  parseInt(e.target.value) || 0
+                                )
+                              }
+                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-900 bg-white"
+                              min="0"
+                              required={manualOrderForm.additionalFees.length > 0}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {manualOrderForm.additionalFees.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Items Subtotal:</span>
+                      <span className="font-medium text-gray-800">
+                        {formatPrice(
+                          manualOrderForm.items.reduce(
+                            (sum, item) => sum + item.price * item.quantity,
+                            0
+                          )
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm mt-1">
+                      <span className="text-gray-600">Additional Fees:</span>
+                      <span className="font-medium text-gray-800">
+                        {formatPrice(
+                          manualOrderForm.additionalFees.reduce(
+                            (sum, fee) => sum + fee.feeAmount,
+                            0
+                          )
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-lg font-semibold mt-2 pt-2 border-t border-gray-200">
+                      <span>Grand Total:</span>
+                      <span className="text-primary-600">
+                        {formatPrice(
+                          manualOrderForm.items.reduce(
+                            (sum, item) => sum + item.price * item.quantity,
+                            0
+                          ) + manualOrderForm.additionalFees.reduce(
+                            (sum, fee) => sum + fee.feeAmount,
+                            0
+                          )
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Form Actions */}
@@ -1658,8 +1871,33 @@ export default function OrdersPage() {
                   <div style={{ borderTop: '1px dashed #9ca3af', margin: '8px 0' }}></div>
                 </div>
 
-                {/* Total */}
+                {/* Additional Fees */}
+                {selectedOrder.order_additional_fees && selectedOrder.order_additional_fees.length > 0 && (
+                  <div style={{ marginBottom: '16px', fontFamily: 'monospace' }}>
+                    {selectedOrder.order_additional_fees.map((fee) => (
+                      <div key={fee.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', fontSize: '12px' }}>
+                        <span>{fee.fee_name}:</span>
+                        <span>{formatPrice(fee.fee_amount)}</span>
+                      </div>
+                    ))}
+                    <div style={{ borderTop: '1px dashed #9ca3af', margin: '8px 0' }}></div>
+                  </div>
+                )}
+
+                {/* Total Breakdown */}
                 <div style={{ marginBottom: '16px', fontFamily: 'monospace' }}>
+                  {selectedOrder.order_additional_fees && selectedOrder.order_additional_fees.length > 0 && (
+                    <>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '4px' }}>
+                        <span>Items Subtotal:</span>
+                        <span>{formatPrice(selectedOrder.order_items.reduce((sum, item) => sum + item.subtotal, 0))}</span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginBottom: '8px' }}>
+                        <span>Additional Fees:</span>
+                        <span>{formatPrice(selectedOrder.order_additional_fees.reduce((sum, fee) => sum + fee.fee_amount, 0))}</span>
+                      </div>
+                    </>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '16px' }}>
                     <span>TOTAL:</span>
                     <span>{formatPrice(selectedOrder.total_amount)}</span>

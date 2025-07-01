@@ -50,6 +50,11 @@ export async function GET(request: NextRequest) {
           price,
           quantity,
           subtotal
+        ),
+        order_additional_fees (
+          id,
+          fee_name,
+          fee_amount
         )
       `)
       .order('created_at', { ascending: false });
@@ -118,6 +123,7 @@ export async function POST(request: NextRequest) {
       customerPhone, 
       customerNotes, 
       items, 
+      additionalFees = [],
       totalAmount, 
       paymentMethod = 'cash',
       pickupTime,
@@ -145,6 +151,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Invalid status. Must be one of: ' + validStatuses.join(', ') 
       }, { status: 400 });
+    }
+
+    // Validate additional fees if provided
+    if (additionalFees && Array.isArray(additionalFees)) {
+      for (const fee of additionalFees) {
+        if (!fee.feeName || typeof fee.feeAmount !== 'number' || fee.feeAmount < 0) {
+          return NextResponse.json({ 
+            error: 'Invalid additional fee. Each fee must have feeName (string) and feeAmount (positive number)' 
+          }, { status: 400 });
+        }
+      }
     }
 
     // Create order
@@ -194,6 +211,26 @@ export async function POST(request: NextRequest) {
       await supabase.from('orders').delete().eq('id', order.id);
       console.error('Order items creation error:', itemsError);
       return NextResponse.json({ error: 'Failed to create order items' }, { status: 500 });
+    }
+
+    // Create additional fees if provided
+    if (additionalFees && additionalFees.length > 0) {
+      const orderFees = additionalFees.map((fee: any) => ({
+        order_id: order.id,
+        fee_name: fee.feeName,
+        fee_amount: fee.feeAmount
+      }));
+
+      const { error: feesError } = await supabase
+        .from('order_additional_fees')
+        .insert(orderFees);
+
+      if (feesError) {
+        // Rollback order and items creation
+        await supabase.from('orders').delete().eq('id', order.id);
+        console.error('Order additional fees creation error:', feesError);
+        return NextResponse.json({ error: 'Failed to create additional fees' }, { status: 500 });
+      }
     }
 
     return NextResponse.json({ 

@@ -80,6 +80,15 @@ CREATE TABLE IF NOT EXISTS order_items (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Order additional fees table (for delivery, service charge, etc.)
+CREATE TABLE IF NOT EXISTS order_additional_fees (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  order_id UUID REFERENCES orders(id) ON DELETE CASCADE,
+  fee_name VARCHAR(100) NOT NULL,
+  fee_amount INTEGER NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_coffee_variants_coffee_id ON coffee_variants(coffee_id);
 CREATE INDEX IF NOT EXISTS idx_coffees_category ON coffees(category);
@@ -87,6 +96,7 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_email ON admin_users(email);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_additional_fees_order_id ON order_additional_fees(order_id);
 
 -- Insert initial config data
 INSERT INTO config (admin_whatsapp, store_name, currency, pickup_address, pickup_coordinates, pickup_map_link)
@@ -109,6 +119,8 @@ INSERT INTO coffees (id, name, description, image, category, best_seller) VALUES
 (6, 'Butterscotch', 'Kopi dengan rasa butterscotch yang manis dan buttery', '/images/koiu-butterscotch.png', 'Coffee', false)
 ON CONFLICT (id) DO NOTHING;
 
+-- Insert coffee variants with stock information
+INSERT INTO coffee_variants (id, coffee_id, size, price, original_price, stock, available) VALUES
 ('1-250ml', 1, '250ml', 13000, 13000, 50, true),
 ('1-1l', 1, '1 Liter', 50000, 50000, 20, true),
 ('2-250ml', 2, '250ml', 13000, 13000, 45, true),
@@ -133,17 +145,35 @@ RETURNS TEXT AS $$
 DECLARE
     new_number TEXT;
     counter INTEGER;
+    today_prefix TEXT;
+    existing_number TEXT;
 BEGIN
     -- Get today's date in YYYYMMDD format
-    SELECT TO_CHAR(NOW(), 'YYYYMMDD') INTO new_number;
+    SELECT TO_CHAR(NOW(), 'YYYYMMDD') INTO today_prefix;
     
-    -- Get the count of orders created today
-    SELECT COUNT(*) + 1 INTO counter
+    -- Find the highest existing number for today
+    SELECT order_number INTO existing_number
     FROM orders 
-    WHERE DATE(created_at) = CURRENT_DATE;
+    WHERE order_number LIKE today_prefix || '-%'
+    ORDER BY order_number DESC
+    LIMIT 1;
+    
+    -- If no orders exist for today, start with 001
+    IF existing_number IS NULL THEN
+        counter := 1;
+    ELSE
+        -- Extract the counter from the existing number and increment
+        counter := (SPLIT_PART(existing_number, '-', 2))::INTEGER + 1;
+    END IF;
     
     -- Format: YYYYMMDD-XXX (e.g., 20241201-001)
-    new_number := new_number || '-' || LPAD(counter::TEXT, 3, '0');
+    new_number := today_prefix || '-' || LPAD(counter::TEXT, 3, '0');
+    
+    -- Check if this number already exists (safety check)
+    WHILE EXISTS (SELECT 1 FROM orders WHERE order_number = new_number) LOOP
+        counter := counter + 1;
+        new_number := today_prefix || '-' || LPAD(counter::TEXT, 3, '0');
+    END LOOP;
     
     RETURN new_number;
 END;
