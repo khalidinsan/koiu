@@ -40,6 +40,7 @@ interface OrderItem {
   price: number;
   quantity: number;
   subtotal: number;
+  item_notes?: string;
 }
 
 interface AdditionalFee {
@@ -106,6 +107,7 @@ interface ManualOrderItem {
   variantSize: string;
   price: number;
   quantity: number;
+  itemNotes?: string;
 }
 
 interface ManualAdditionalFee {
@@ -126,6 +128,7 @@ export default function OrdersPage() {
   const [showManualOrderModal, setShowManualOrderModal] = useState(false);
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [showEditOrderModal, setShowEditOrderModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGeneratingReceipt, setIsGeneratingReceipt] = useState(false);
   const [error, setError] = useState('');
@@ -150,6 +153,19 @@ export default function OrdersPage() {
 
   // Manual order form
   const [manualOrderForm, setManualOrderForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    customerNotes: '',
+    paymentMethod: 'cash' as 'cash' | 'transfer',
+    pickupTime: '',
+    status: 'pending' as 'pending' | 'confirmed' | 'preparing' | 'ready' | 'completed' | 'cancelled',
+    items: [] as ManualOrderItem[],
+    additionalFees: [] as ManualAdditionalFee[]
+  });
+
+  // Edit order form (similar to manual order form)
+  const [editOrderForm, setEditOrderForm] = useState({
+    orderId: '',
     customerName: '',
     customerPhone: '',
     customerNotes: '',
@@ -353,6 +369,99 @@ export default function OrdersPage() {
       additionalFees: []
     });
     setShowManualOrderModal(true);
+  };
+
+  const openEditOrderModal = (order: Order) => {
+    if (order.status === 'completed') {
+      setError('Cannot edit completed orders');
+      return;
+    }
+
+    setEditOrderForm({
+      orderId: order.id,
+      customerName: order.customer_name,
+      customerPhone: order.customer_phone,
+      customerNotes: order.customer_notes || '',
+      paymentMethod: order.payment_method,
+      pickupTime: order.pickup_time ? order.pickup_time.slice(0, 16) : '',
+      status: order.status,
+      items: order.order_items.map(item => {
+        // Find coffee ID from coffees array
+        const coffee = coffees.find(c => 
+          c.coffee_variants.some(v => v.id === item.variant_id)
+        );
+        return {
+          coffeeId: coffee?.id || 0,
+          variantId: item.variant_id,
+          coffeeName: item.coffee_name,
+          variantSize: item.variant_size,
+          price: item.price,
+          quantity: item.quantity,
+          itemNotes: item.item_notes || ''
+        };
+      }),
+      additionalFees: order.order_additional_fees?.map(fee => ({
+        feeName: fee.fee_name,
+        feeAmount: fee.fee_amount
+      })) || []
+    });
+    setShowEditOrderModal(true);
+  };
+
+  const handleEditOrder = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    setError('');
+
+    try {
+      const orderData = {
+        orderId: editOrderForm.orderId,
+        status: editOrderForm.status,
+        customerNotes: editOrderForm.customerNotes || null,
+        paymentMethod: editOrderForm.paymentMethod,
+        pickupTime: editOrderForm.pickupTime || null,
+        items: editOrderForm.items.map(item => ({
+          coffeeId: item.coffeeId,
+          variantId: item.variantId,
+          coffeeName: item.coffeeName,
+          variantSize: item.variantSize,
+          price: item.price,
+          quantity: item.quantity,
+          itemNotes: item.itemNotes || null
+        })),
+        additionalFees: editOrderForm.additionalFees,
+        totalAmount: calculateEditOrderTotal()
+      };
+
+      const response = await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(orderData),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        setSuccess('Order updated successfully!');
+        setShowEditOrderModal(false);
+        fetchOrders();
+      } else {
+        setError(result.error || 'Failed to update order');
+      }
+    } catch (error) {
+      console.error('Error updating order:', error);
+      setError('An error occurred while updating the order');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const calculateEditOrderTotal = () => {
+    const itemsTotal = editOrderForm.items.reduce((total, item) => total + (item.price * item.quantity), 0);
+    const feesTotal = editOrderForm.additionalFees.reduce((total, fee) => total + fee.feeAmount, 0);
+    return itemsTotal + feesTotal;
   };
 
   const handleSubmitManualOrder = async (e: React.FormEvent) => {
@@ -662,6 +771,102 @@ export default function OrdersPage() {
     setShowReceiptModal(true);
   };
 
+  // Edit order form management functions
+  const addEditOrderItem = () => {
+    setEditOrderForm(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        coffeeId: 0,
+        variantId: '',
+        coffeeName: '',
+        variantSize: '',
+        price: 0,
+        quantity: 1,
+        itemNotes: ''
+      }]
+    }));
+  };
+
+  const removeEditOrderItem = (index: number) => {
+    setEditOrderForm(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateEditOrderItem = (index: number, field: keyof ManualOrderItem, value: any) => {
+    setEditOrderForm(prev => ({
+      ...prev,
+      items: prev.items.map((item, i) => 
+        i === index ? { ...item, [field]: value } : item
+      )
+    }));
+  };
+
+  const handleEditCoffeeSelection = (index: number, coffeeId: number) => {
+    const coffee = coffees.find(c => c.id === coffeeId);
+    if (coffee && coffee.coffee_variants.length > 0) {
+      const firstVariant = coffee.coffee_variants[0];
+      setEditOrderForm(prev => ({
+        ...prev,
+        items: prev.items.map((item, i) => 
+          i === index ? {
+            ...item,
+            coffeeId,
+            coffeeName: coffee.name,
+            variantId: firstVariant.id,
+            variantSize: firstVariant.size,
+            price: firstVariant.price
+          } : item
+        )
+      }));
+    }
+  };
+
+  const handleEditVariantSelection = (index: number, variantId: string) => {
+    const coffee = coffees.find(c => 
+      c.coffee_variants.some(v => v.id === variantId)
+    );
+    const variant = coffee?.coffee_variants.find(v => v.id === variantId);
+    
+    if (variant) {
+      setEditOrderForm(prev => ({
+        ...prev,
+        items: prev.items.map((item, i) => 
+          i === index ? {
+            ...item,
+            variantId: variant.id,
+            variantSize: variant.size,
+            price: variant.price
+          } : item
+        )
+      }));
+    }
+  };
+
+  const addEditOrderFee = () => {
+    setEditOrderForm(prev => ({
+      ...prev,
+      additionalFees: [...prev.additionalFees, { feeName: '', feeAmount: 0 }]
+    }));
+  };
+
+  const removeEditOrderFee = (index: number) => {
+    setEditOrderForm(prev => ({
+      ...prev,
+      additionalFees: prev.additionalFees.filter((_, i) => i !== index)
+    }));
+  };
+
+  const updateEditOrderFee = (index: number, field: keyof ManualAdditionalFee, value: any) => {
+    setEditOrderForm(prev => ({
+      ...prev,
+      additionalFees: prev.additionalFees.map((fee, i) => 
+        i === index ? { ...fee, [field]: value } : fee
+      )
+    }));
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -819,14 +1024,16 @@ export default function OrdersPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
+                    <button
+                      onClick={() => openStatusModal(order)}
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition-opacity ${getStatusColor(
                         order.status
                       )}`}
+                      title="Click to update status"
                     >
                       {getStatusIcon(order.status)}
                       <span className="ml-1 capitalize">{order.status}</span>
-                    </span>
+                    </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
@@ -849,13 +1056,15 @@ export default function OrdersPage() {
                       >
                         <Receipt className="h-4 w-4" />
                       </button>
-                      <button
-                        onClick={() => openStatusModal(order)}
-                        className="text-blue-600 hover:text-blue-900"
-                        title="Update Status"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
+                      {order.status !== 'completed' && (
+                        <button
+                          onClick={() => openEditOrderModal(order)}
+                          className="text-orange-600 hover:text-orange-900"
+                          title="Edit Order"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDeleteOrder(order.id)}
                         className="text-red-600 hover:text-red-900"
@@ -1022,6 +1231,11 @@ export default function OrdersPage() {
                         <div className="text-sm text-gray-600">
                           Size: {item.variant_size}
                         </div>
+                        {item.item_notes && (
+                          <div className="text-sm text-blue-600 mt-1">
+                            Note: {item.item_notes}
+                          </div>
+                        )}
                       </div>
                       <div className="flex items-center space-x-3">
                         <div className="text-right">
@@ -1506,6 +1720,25 @@ export default function OrdersPage() {
                         </div>
                       </div>
 
+                      <div className="mt-3">
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Item Notes (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={item.itemNotes || ''}
+                          onChange={(e) =>
+                            updateManualOrderItem(
+                              index,
+                              "itemNotes",
+                              e.target.value
+                            )
+                          }
+                          placeholder="e.g., less sugar, extra hot, no whip cream..."
+                          className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-primary-500 text-gray-900 bg-white"
+                        />
+                      </div>
+
                       <div className="mt-2 text-right">
                         <span className="text-sm font-medium text-gray-600">
                           Subtotal: {formatPrice(item.price * item.quantity)}
@@ -1937,6 +2170,381 @@ export default function OrdersPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Order Modal */}
+      {showEditOrderModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-gray-800">
+                  Edit Order #{editOrderForm.orderId.slice(-8)}
+                </h2>
+                <button
+                  onClick={() => setShowEditOrderModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5 text-gray-600" />
+                </button>
+              </div>
+            </div>
+
+            <form onSubmit={handleEditOrder} className="p-6 space-y-6">
+              {/* Customer Information */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Customer Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Customer Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editOrderForm.customerName}
+                      onChange={(e) =>
+                        setEditOrderForm((prev) => ({
+                          ...prev,
+                          customerName: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Phone Number
+                    </label>
+                    <input
+                      type="tel"
+                      value={editOrderForm.customerPhone}
+                      onChange={(e) =>
+                        setEditOrderForm((prev) => ({
+                          ...prev,
+                          customerPhone: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Customer Notes (Optional)
+                  </label>
+                  <textarea
+                    value={editOrderForm.customerNotes}
+                    onChange={(e) =>
+                      setEditOrderForm((prev) => ({
+                        ...prev,
+                        customerNotes: e.target.value,
+                      }))
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                    rows={2}
+                  />
+                </div>
+              </div>
+
+              {/* Order Details */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                  Order Details
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Method
+                    </label>
+                    <select
+                      value={editOrderForm.paymentMethod}
+                      onChange={(e) =>
+                        setEditOrderForm((prev) => ({
+                          ...prev,
+                          paymentMethod: e.target.value as "cash" | "transfer",
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="transfer">Transfer</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Order Status
+                    </label>
+                    <select
+                      value={editOrderForm.status}
+                      onChange={(e) =>
+                        setEditOrderForm((prev) => ({
+                          ...prev,
+                          status: e.target.value as any,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="confirmed">Confirmed</option>
+                      <option value="preparing">Preparing</option>
+                      <option value="ready">Ready for Pickup</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Pickup Time (Optional)
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={editOrderForm.pickupTime}
+                      onChange={(e) =>
+                        setEditOrderForm((prev) => ({
+                          ...prev,
+                          pickupTime: e.target.value,
+                        }))
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Items */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Order Items
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addEditOrderItem}
+                    className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Item</span>
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  {editOrderForm.items.map((item, index) => (
+                    <div
+                      key={index}
+                      className="p-4 bg-gray-50 rounded-lg space-y-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-800">Item {index + 1}</h4>
+                        <button
+                          type="button"
+                          onClick={() => removeEditOrderItem(index)}
+                          className="p-1 text-red-600 hover:bg-red-100 rounded"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Coffee
+                          </label>
+                          <select
+                            value={item.coffeeId}
+                            onChange={(e) =>
+                              handleEditCoffeeSelection(index, parseInt(e.target.value))
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                            required
+                          >
+                            <option value={0}>Select Coffee</option>
+                            {coffees.map((coffee) => (
+                              <option key={coffee.id} value={coffee.id}>
+                                {coffee.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Size
+                          </label>
+                          <select
+                            value={item.variantId}
+                            onChange={(e) =>
+                              handleEditVariantSelection(index, e.target.value)
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                            required
+                            disabled={!item.coffeeId}
+                          >
+                            <option value="">Select Size</option>
+                            {item.coffeeId &&
+                              coffees
+                                .find((c) => c.id === item.coffeeId)
+                                ?.coffee_variants.map((variant) => (
+                                  <option key={variant.id} value={variant.id}>
+                                    {variant.size} - {formatPrice(variant.price)}
+                                  </option>
+                                ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Quantity
+                          </label>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) =>
+                              updateEditOrderItem(index, 'quantity', parseInt(e.target.value))
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                            required
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Subtotal
+                          </label>
+                          <input
+                            type="text"
+                            value={formatPrice(item.price * item.quantity)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600"
+                            disabled
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Item Notes (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          value={item.itemNotes || ''}
+                          onChange={(e) =>
+                            updateEditOrderItem(index, 'itemNotes', e.target.value)
+                          }
+                          placeholder="e.g., less sugar, extra hot, no whip cream..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {editOrderForm.items.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    No items added yet. Click "Add Item" to get started.
+                  </div>
+                )}
+              </div>
+
+              {/* Additional Fees */}
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-800">
+                    Additional Fees (Optional)
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addEditOrderFee}
+                    className="flex items-center space-x-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    <Plus className="h-4 w-4" />
+                    <span>Add Fee</span>
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {editOrderForm.additionalFees.map((fee, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <input
+                          type="text"
+                          value={fee.feeName}
+                          onChange={(e) =>
+                            updateEditOrderFee(index, 'feeName', e.target.value)
+                          }
+                          placeholder="Fee name (e.g., Delivery, Service charge)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                          required
+                        />
+                      </div>
+                      <div className="w-32">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1000"
+                          value={fee.feeAmount}
+                          onChange={(e) =>
+                            updateEditOrderFee(index, 'feeAmount', parseInt(e.target.value) || 0)
+                          }
+                          placeholder="Amount"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent text-gray-900 bg-white"
+                          required
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeEditOrderFee(index)}
+                        className="p-2 text-red-600 hover:bg-red-100 rounded"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Order Summary */}
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between text-lg font-semibold">
+                  <span>Total Amount:</span>
+                  <span className="text-blue-600">
+                    {formatPrice(calculateEditOrderTotal())}
+                  </span>
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowEditOrderModal(false)}
+                  className="px-6 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmitting || editOrderForm.items.length === 0}
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  {isSubmitting ? (
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      <span>Updating...</span>
+                    </div>
+                  ) : (
+                    "Update Order"
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

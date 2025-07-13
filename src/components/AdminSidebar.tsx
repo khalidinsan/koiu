@@ -11,7 +11,9 @@ import {
   LogOut,
   Package,
   BarChart3,
-  ChefHat
+  ChefHat,
+  User,
+  FileText
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -105,6 +107,28 @@ export default function AdminSidebar({ sidebarOpen, setSidebarOpen }: AdminSideb
             >
               <Settings className="h-5 w-5" />
               <span>Configuration</span>
+            </Link>
+            <Link
+              href="/admin/reports"
+              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                pathname === '/admin/reports'
+                  ? 'text-primary-600 bg-primary-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <FileText className="h-5 w-5" />
+              <span>Sales Reports</span>
+            </Link>
+            <Link
+              href="/admin/profile"
+              className={`flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                pathname === '/admin/profile'
+                  ? 'text-primary-600 bg-primary-50'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <User className="h-5 w-5" />
+              <span>Profile</span>
             </Link>
           </div>
           

@@ -8,6 +8,7 @@ interface OrderItem {
   variantSize: string;
   price: number;
   quantity: number;
+  itemNotes?: string;
 }
 
 interface OrderData {
@@ -78,7 +79,8 @@ export async function POST(request: NextRequest) {
       variant_size: item.variantSize,
       price: item.price,
       quantity: item.quantity,
-      subtotal: item.price * item.quantity
+      subtotal: item.price * item.quantity,
+      item_notes: item.itemNotes || null
     }));
 
     const { error: itemsError } = await supabase

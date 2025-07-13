@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   price INTEGER NOT NULL,
   quantity INTEGER NOT NULL,
   subtotal INTEGER NOT NULL,
+  item_notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

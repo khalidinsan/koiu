@@ -14,6 +14,7 @@ interface CartItem {
   originalPrice: number;
   image: string;
   quantity: number;
+  itemNotes?: string;
 }
 
 interface Config {
@@ -75,6 +76,18 @@ function CheckoutContent() {
     });
   };
 
+  const updateItemNotes = (coffeeId: number, variantId: string, notes: string) => {
+    setCart(prevCart => {
+      const updatedCart = prevCart.map(item =>
+        item.coffeeId === coffeeId && item.variantId === variantId 
+          ? { ...item, itemNotes: notes } 
+          : item
+      );
+      localStorage.setItem('coffee-cart', JSON.stringify(updatedCart));
+      return updatedCart;
+    });
+  };
+
   const removeFromCart = (coffeeId: number, variantId: string) => {
     setCart(prevCart => {
       const updatedCart = prevCart.filter(item => 
@@ -114,7 +127,8 @@ function CheckoutContent() {
           coffeeName: item.name,
           variantSize: item.size,
           price: item.price,
-          quantity: item.quantity
+          quantity: item.quantity,
+          itemNotes: item.itemNotes || null
         })),
         totalAmount: getTotalPrice(),
         paymentMethod: 'cash' as const, // Default payment method, admin can update later
@@ -147,7 +161,11 @@ function CheckoutContent() {
       message += `\n*Detail Pesanan:*\n`;
       
       cart.forEach(item => {
-        message += `• ${item.name} (${item.size}) x${item.quantity} - ${formatPrice(item.price * item.quantity)}\n`;
+        message += `• ${item.name} (${item.size}) x${item.quantity} - ${formatPrice(item.price * item.quantity)}`;
+        if (item.itemNotes) {
+          message += `\n  Catatan: ${item.itemNotes}`;
+        }
+        message += `\n`;
       });
       
       message += `\n*Total: ${formatPrice(getTotalPrice())}*\n\n`;
@@ -265,6 +283,17 @@ function CheckoutContent() {
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
+                    </div>
+                    
+                    {/* Item Notes */}
+                    <div className="mt-3">
+                      <input
+                        type="text"
+                        value={item.itemNotes || ''}
+                        onChange={(e) => updateItemNotes(item.coffeeId, item.variantId, e.target.value)}
+                        placeholder="Tambahkan catatan item (misal: less sugar, extra hot, dll.)"
+                        className="w-full px-3 py-2 text-sm text-gray-800 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all"
+                      />
                     </div>
                   </div>
                 </div>

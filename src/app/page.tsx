@@ -34,6 +34,7 @@ interface CartItem {
   originalPrice: number;
   image: string;
   quantity: number;
+  itemNotes?: string;
 }
 
 interface Config {
@@ -61,6 +62,9 @@ export default function CoffeeOrderPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVariants, setSelectedVariants] = useState<{ [key: number]: string }>({});
   const [isLoading, setIsLoading] = useState(true);
+  const [showNotesModal, setShowNotesModal] = useState(false);
+  const [selectedCoffeeForNotes, setSelectedCoffeeForNotes] = useState<Coffee | null>(null);
+  const [itemNotes, setItemNotes] = useState('');
 
   useEffect(() => {
     // Load coffee data from API
@@ -110,12 +114,12 @@ export default function CoffeeOrderPage() {
     return coffee.variants.find(variant => variant.id === selectedVariantId) || coffee.variants[0];
   };
 
-  const addToCart = (coffee: Coffee) => {
+  const addToCart = (coffee: Coffee, itemNotes?: string) => {
     const selectedVariant = getSelectedVariant(coffee);
     if (!selectedVariant || !selectedVariant.available || selectedVariant.stock <= 0) return;
 
     const existingItem = cart.find(item => 
-      item.coffeeId === coffee.id && item.variantId === selectedVariant.id
+      item.coffeeId === coffee.id && item.variantId === selectedVariant.id && item.itemNotes === itemNotes
     );
 
     if (existingItem) {
@@ -126,7 +130,7 @@ export default function CoffeeOrderPage() {
       
       setCart(prevCart =>
         prevCart.map(item =>
-          item.coffeeId === coffee.id && item.variantId === selectedVariant.id
+          item.coffeeId === coffee.id && item.variantId === selectedVariant.id && item.itemNotes === itemNotes
             ? { ...item, quantity: item.quantity + 1 }
             : item
         )
@@ -140,7 +144,8 @@ export default function CoffeeOrderPage() {
         price: selectedVariant.price,
         originalPrice: selectedVariant.originalPrice,
         image: coffee.image,
-        quantity: 1
+        quantity: 1,
+        itemNotes: itemNotes || undefined
       };
       setCart(prevCart => [...prevCart, newItem]);
     }
@@ -202,6 +207,25 @@ export default function CoffeeOrderPage() {
     if (!variant.available || variant.stock <= 0) return 'text-red-500';
     if (variant.stock < 10) return 'text-yellow-500';
     return 'text-green-500';
+  };
+
+  const openNotesModal = (coffee: Coffee) => {
+    setSelectedCoffeeForNotes(coffee);
+    setItemNotes('');
+    setShowNotesModal(true);
+  };
+
+  const closeNotesModal = () => {
+    setShowNotesModal(false);
+    setSelectedCoffeeForNotes(null);
+    setItemNotes('');
+  };
+
+  const addToCartWithNotes = () => {
+    if (selectedCoffeeForNotes) {
+      addToCart(selectedCoffeeForNotes, itemNotes);
+      closeNotesModal();
+    }
   };
 
   if (isLoading) {
@@ -386,7 +410,7 @@ export default function CoffeeOrderPage() {
                       </button>
                       <span className="font-semibold text-blue-600 text-lg">{cartQuantity}</span>
                       <button
-                        onClick={() => addToCart(coffee)}
+                        onClick={() => openNotesModal(coffee)}
                         disabled={!canAddToCart}
                         className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
                       >
@@ -395,10 +419,10 @@ export default function CoffeeOrderPage() {
                     </div>
                   ) : (
                     <button
-                      onClick={() => addToCart(coffee)}
+                      onClick={() => openNotesModal(coffee)}
                       disabled={!canAddToCart}
                       className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2 disabled:bg-gray-300 disabled:cursor-not-allowed font-semibold"
-        >
+                    >
                       <Plus className="h-4 w-4" />
                       <span>Tambah</span>
                     </button>
@@ -429,6 +453,49 @@ export default function CoffeeOrderPage() {
             >
               Checkout
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Modal */}
+      {showNotesModal && selectedCoffeeForNotes && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold text-gray-800 mb-2">
+              Tambah ke Keranjang
+            </h3>
+            <p className="text-gray-600 mb-4">
+              {selectedCoffeeForNotes.name} - {getSelectedVariant(selectedCoffeeForNotes).size}
+            </p>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Catatan Item (Opsional)
+              </label>
+              <input
+                type="text"
+                value={itemNotes}
+                onChange={(e) => setItemNotes(e.target.value)}
+                placeholder="Misal: less sugar, extra hot, tanpa whip cream..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-transparent transition-all text-gray-800"
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex space-x-3">
+              <button
+                onClick={closeNotesModal}
+                className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
+              >
+                Batal
+              </button>
+              <button
+                onClick={addToCartWithNotes}
+                className="flex-1 py-3 px-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                Tambah ke Keranjang
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -21,98 +21,161 @@ async function verifyAdminSession() {
   }
 }
 
-// GET - Fetch admin profile
-export async function GET() {
-  const adminId = await verifyAdminSession();
-  
-  if (!adminId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function GET(request: NextRequest) {
   try {
-    const { data: adminUser, error } = await supabase
+    const adminId = await verifyAdminSession();
+    if (!adminId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Get admin profile
+    const { data: admin, error } = await supabase
       .from('admin_users')
-      .select('id, email, created_at')
+      .select('id, email, created_at, updated_at')
       .eq('id', adminId)
       .single();
 
-    if (error) {
-      return NextResponse.json({ error: 'Failed to fetch profile' }, { status: 500 });
+    if (error || !admin) {
+      return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ 
-      admin: {
-        id: adminUser.id,
-        email: adminUser.email,
-        createdAt: adminUser.created_at
-      }
-    });
+    // Return profile data (excluding password)
+    const profile = {
+      id: admin.id,
+      email: admin.email,
+      name: 'Admin',
+      created_at: admin.created_at,
+      updated_at: admin.updated_at
+    };
+
+    return NextResponse.json({ profile });
   } catch (error) {
-    console.error('Get profile error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Profile fetch error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 }
 
-// PUT - Update admin password
 export async function PUT(request: NextRequest) {
-  const adminId = await verifyAdminSession();
-  
-  if (!adminId) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
-    const { currentPassword, newPassword } = await request.json();
-
-    if (!currentPassword || !newPassword) {
-      return NextResponse.json({ 
-        error: 'Current password and new password are required' 
-      }, { status: 400 });
+    const adminId = await verifyAdminSession();
+    if (!adminId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    if (newPassword.length < 6) {
-      return NextResponse.json({ 
-        error: 'New password must be at least 6 characters long' 
-      }, { status: 400 });
-    }
+    const body = await request.json();
+    const { action, currentPassword } = body;
 
-    // Get current admin user
-    const { data: adminUser, error: fetchError } = await supabase
+    // Get current admin data to verify password
+    const { data: admin, error: fetchError } = await supabase
       .from('admin_users')
       .select('*')
       .eq('id', adminId)
       .single();
 
-    if (fetchError || !adminUser) {
-      return NextResponse.json({ error: 'Admin user not found' }, { status: 404 });
+    if (fetchError || !admin) {
+      return NextResponse.json({ error: 'Admin not found' }, { status: 404 });
     }
 
     // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, adminUser.password_hash);
-
-    if (!isCurrentPasswordValid) {
-      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 });
+    const isValidPassword = await bcrypt.compare(currentPassword, admin.password_hash);
+    if (!isValidPassword) {
+      return NextResponse.json(
+        { error: 'Current password is incorrect' },
+        { status: 400 }
+      );
     }
 
-    // Hash new password
-    const hashedNewPassword = await bcrypt.hash(newPassword, 12);
+    if (action === 'update_email') {
+      const { email } = body;
 
-    // Update password
-    const { error: updateError } = await supabase
-      .from('admin_users')
-      .update({ password_hash: hashedNewPassword })
-      .eq('id', adminId);
+      if (!email || !email.includes('@')) {
+        return NextResponse.json(
+          { error: 'Please provide a valid email address' },
+          { status: 400 }
+        );
+      }
 
-    if (updateError) {
-      return NextResponse.json({ error: 'Failed to update password' }, { status: 500 });
+      // Check if email is already taken by another admin
+      const { data: existingAdmin } = await supabase
+        .from('admin_users')
+        .select('id')
+        .eq('email', email)
+        .neq('id', adminId)
+        .single();
+
+      if (existingAdmin) {
+        return NextResponse.json(
+          { error: 'Email address is already in use' },
+          { status: 400 }
+        );
+      }
+
+      // Update email
+      const { error } = await supabase
+        .from('admin_users')
+        .update({ 
+          email,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', adminId);
+
+      if (error) {
+        console.error('Email update error:', error);
+        return NextResponse.json(
+          { error: 'Failed to update email' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ message: 'Email updated successfully' });
+
+    } else if (action === 'update_password') {
+      const { newPassword } = body;
+
+      if (!newPassword || newPassword.length < 8) {
+        return NextResponse.json(
+          { error: 'New password must be at least 8 characters long' },
+          { status: 400 }
+        );
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+      // Update password
+      const { error } = await supabase
+        .from('admin_users')
+        .update({ 
+          password_hash: hashedPassword,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', adminId);
+
+      if (error) {
+        console.error('Password update error:', error);
+        return NextResponse.json(
+          { error: 'Failed to update password' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ message: 'Password updated successfully' });
+
+    } else {
+      return NextResponse.json(
+        { error: 'Invalid action' },
+        { status: 400 }
+      );
     }
 
-    return NextResponse.json({ 
-      success: true,
-      message: 'Password updated successfully'
-    });
   } catch (error) {
-    console.error('Update profile error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('Profile update error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
   }
 } 

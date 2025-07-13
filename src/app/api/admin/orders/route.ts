@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
           variant_size,
           price,
           quantity,
-          subtotal
+          subtotal,
+          item_notes
         ),
         order_additional_fees (
           id,
@@ -199,7 +200,8 @@ export async function POST(request: NextRequest) {
       variant_size: item.variantSize,
       price: item.price,
       quantity: item.quantity,
-      subtotal: item.price * item.quantity
+      subtotal: item.price * item.quantity,
+      item_notes: item.itemNotes || null
     }));
 
     const { error: itemsError } = await supabase
@@ -247,7 +249,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Update order status, payment method, and pickup time
+// PUT - Update order status, payment method, pickup time, and items for non-completed orders
 export async function PUT(request: NextRequest) {
   const adminId = await verifyAdminSession();
   
@@ -257,12 +259,39 @@ export async function PUT(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { orderId, status, customerNotes, paymentMethod, pickupTime } = body;
+    const { 
+      orderId, 
+      status, 
+      customerNotes, 
+      paymentMethod, 
+      pickupTime, 
+      items, 
+      additionalFees,
+      totalAmount 
+    } = body;
 
     // Validate required fields
     if (!orderId) {
       return NextResponse.json({ 
         error: 'Missing required field: orderId' 
+      }, { status: 400 });
+    }
+
+    // Check if order exists and get current status
+    const { data: currentOrder, error: fetchError } = await supabase
+      .from('orders')
+      .select('status')
+      .eq('id', orderId)
+      .single();
+
+    if (fetchError || !currentOrder) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
+
+    // Check if items update is requested and order is not completed
+    if (items && currentOrder.status === 'completed') {
+      return NextResponse.json({ 
+        error: 'Cannot edit items for completed orders' 
       }, { status: 400 });
     }
 
@@ -286,7 +315,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Build update data
+    // Build update data for order
     const updateData: any = {
       updated_at: new Date().toISOString()
     };
@@ -307,6 +336,10 @@ export async function PUT(request: NextRequest) {
       updateData.pickup_time = pickupTime ? new Date(pickupTime).toISOString() : null;
     }
 
+    if (totalAmount !== undefined) {
+      updateData.total_amount = totalAmount;
+    }
+
     // Update order
     const { data: updatedOrder, error: updateError } = await supabase
       .from('orders')
@@ -318,6 +351,74 @@ export async function PUT(request: NextRequest) {
     if (updateError) {
       console.error('Order update error:', updateError);
       return NextResponse.json({ error: 'Failed to update order' }, { status: 500 });
+    }
+
+    // Update items if provided and order is not completed
+    if (items && currentOrder.status !== 'completed') {
+      // Delete existing items
+      const { error: deleteItemsError } = await supabase
+        .from('order_items')
+        .delete()
+        .eq('order_id', orderId);
+
+      if (deleteItemsError) {
+        console.error('Error deleting existing items:', deleteItemsError);
+        return NextResponse.json({ error: 'Failed to update order items' }, { status: 500 });
+      }
+
+      // Insert new items
+      const orderItems = items.map((item: any) => ({
+        order_id: orderId,
+        coffee_id: item.coffeeId || null,
+        variant_id: item.variantId || null,
+        coffee_name: item.coffeeName,
+        variant_size: item.variantSize,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.price * item.quantity,
+        item_notes: item.itemNotes || null
+      }));
+
+      const { error: itemsError } = await supabase
+        .from('order_items')
+        .insert(orderItems);
+
+      if (itemsError) {
+        console.error('Error inserting new items:', itemsError);
+        return NextResponse.json({ error: 'Failed to update order items' }, { status: 500 });
+      }
+    }
+
+    // Update additional fees if provided
+    if (additionalFees !== undefined) {
+      // Delete existing fees
+      const { error: deleteFeesError } = await supabase
+        .from('order_additional_fees')
+        .delete()
+        .eq('order_id', orderId);
+
+      if (deleteFeesError) {
+        console.error('Error deleting existing fees:', deleteFeesError);
+        return NextResponse.json({ error: 'Failed to update additional fees' }, { status: 500 });
+      }
+
+      // Insert new fees if any
+      if (additionalFees.length > 0) {
+        const orderFees = additionalFees.map((fee: any) => ({
+          order_id: orderId,
+          fee_name: fee.feeName,
+          fee_amount: fee.feeAmount
+        }));
+
+        const { error: feesError } = await supabase
+          .from('order_additional_fees')
+          .insert(orderFees);
+
+        if (feesError) {
+          console.error('Error inserting new fees:', feesError);
+          return NextResponse.json({ error: 'Failed to update additional fees' }, { status: 500 });
+        }
+      }
     }
 
     return NextResponse.json({ 
